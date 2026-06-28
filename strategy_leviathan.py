@@ -51,10 +51,36 @@ def choppiness_index(df, period=14):
     return 100 * np.log10((high - low) / atr_sum) / np.log10(period) if atr_sum.iloc[-1] > 0 else 50
 
 # ------------------------------------------------------------
-# 2. DETECCIÓN DE RÉGIMEN
+# 2. CÁLCULO DE FEATURES (CREA LAS COLUMNAS FALTANTES)
+# ------------------------------------------------------------
+def compute_features(df):
+    df = df.copy()
+    df["prev_close"] = df["close"].shift(1)
+    df["tr"] = np.maximum(df["high"] - df["low"],
+                          np.maximum(abs(df["high"] - df["prev_close"]),
+                                     abs(df["low"] - df["prev_close"])))
+    df["atr"] = df["tr"].rolling(14).mean()
+    df["atr_pct"] = df["atr"] / df["close"]
+    df["ema20"] = df["close"].ewm(span=20, adjust=False).mean()
+    df["ema50"] = df["close"].ewm(span=50, adjust=False).mean()
+    df["slope_ema20"] = df["ema20"].diff(5) / df["ema20"].shift(5)
+    df["volume_avg"] = df["vol"].rolling(20).mean()
+    df["volume_ratio"] = df["vol"] / df["volume_avg"]
+    df["momentum"] = df["close"].pct_change(5)
+    df["trend_up"] = np.where((df["ema20"] > df["ema50"]) & (df["slope_ema20"] > 0), 100,
+                              np.where((df["ema20"] > df["ema50"]) & (df["slope_ema20"] <= 0), 70,
+                                       np.where((df["ema20"] < df["ema50"]) & (df["slope_ema20"] < 0), 0, 30)))
+    df["volatility_score"] = (100 - np.abs(df["atr_pct"] - 0.01) * 10000).clip(0, 100)
+    df["volume_score"] = ((df["volume_ratio"].clip(0.5, 2) - 0.5) / 1.5 * 100)
+    df["momentum_score"] = df["momentum"].rolling(50).rank(pct=True) * 100
+    return df
+
+# ------------------------------------------------------------
+# 3. DETECCIÓN DE RÉGIMEN
 # ------------------------------------------------------------
 def detect_regime(df):
-    atr_pct = (calculate_atr(df).iloc[-1] / df['c'].iloc[-1])
+    # df debe tener las columnas creadas por compute_features
+    atr_pct = df['atr_pct'].iloc[-1]
     ker = calculate_ker(df['c']).iloc[-1]
     adx, _, _ = calculate_adx(df)
     adx_val = adx.iloc[-1]
@@ -76,16 +102,17 @@ def detect_regime(df):
         return 'MIXED'
 
 # ------------------------------------------------------------
-# 3. SCORE MAESTRO CON PENALIZACIÓN POR DURACIÓN
+# 4. SCORE MAESTRO CON PENALIZACIÓN POR DURACIÓN
 # ------------------------------------------------------------
 def compute_final_score(df, symbol):
+    # df ya debe tener las columnas de compute_features
     row = df.iloc[-1]
-    close = row['c']
-    high = row['h']
-    low = row['l']
+    close = row['close']
+    high = row['high']
+    low = row['low']
     vol = row['vol']
-    atr = calculate_atr(df).iloc[-1]
-    atr_pct = atr / close
+    atr = row['atr']
+    atr_pct = row['atr_pct']
     ker = calculate_ker(df['c']).iloc[-1]
     adx_val, plus_di, minus_di = calculate_adx(df)
     adx = adx_val.iloc[-1]
@@ -139,14 +166,14 @@ def compute_final_score(df, symbol):
     return final_score, expected_duration
 
 # ------------------------------------------------------------
-# 4. ADAPTACIÓN DE PARÁMETROS
+# 5. ADAPTACIÓN DE PARÁMETROS
 # ------------------------------------------------------------
 def get_asset_params(symbol):
     default = {'threshold': 50, 'tp_mult': 1.2, 'trail_dist': 0.6, 'trail_act': 0.6, 'hold': 60}
     return config.ASSET_PARAMS.get(symbol, default)
 
 # ------------------------------------------------------------
-# 5. ERA (Explosive Risk Alert)
+# 6. ERA (Explosive Risk Alert)
 # ------------------------------------------------------------
 class ERA:
     def __init__(self):
@@ -176,7 +203,7 @@ class ERA:
         return self.active[symbol]
 
 # ------------------------------------------------------------
-# 6. GENERACIÓN DE SEÑAL (con ranking y parámetros por activo)
+# 7. GENERACIÓN DE SEÑAL (con ranking y parámetros por activo)
 # ------------------------------------------------------------
 def get_best_signal(symbols=None, speed_levels=None, speed_levels_override=None):
     if symbols is None:
@@ -194,6 +221,9 @@ def get_best_signal(symbols=None, speed_levels=None, speed_levels_override=None)
         if df.empty or len(df) < 100:
             continue
 
+        # 🔧 CORRECCIÓN: Calcular features ANTES de usar cualquier columna derivada
+        df = compute_features(df)
+
         regime = detect_regime(df)
         final_score, expected_duration = compute_final_score(df, symbol)
 
@@ -202,11 +232,11 @@ def get_best_signal(symbols=None, speed_levels=None, speed_levels_override=None)
 
         row = df.iloc[-1]
         direction = 1 if row['ema20'] > row['ema50'] else -1
-        atr = calculate_atr(df).iloc[-1]
+        atr = row['atr']
         vol = row['vol']
         era_active = era.update(symbol, atr, vol)
 
-        # Apalancamiento fijo (se ignora suggested_leverage)
+        # Apalancamiento fijo
         leverage = config.LEVERAGE
 
         entry = row['close']
