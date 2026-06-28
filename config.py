@@ -36,6 +36,17 @@ TRAILING_ACTIVATION_PROFIT = 0.6
 # ---- FILTROS (necesario para signals.py, pero no usado en Leviatán) ----
 FILTERS = {}  # vacío, porque Leviatán no usa filtros de PiDelta
 
+# ---- NIVELES DE VELOCIDAD (necesario para validación de config) ----
+SPEED_LEVELS = [
+    {"nivel": 1, "raw_min": 0.45, "roc_min": 0.30},
+    {"nivel": 2, "raw_min": 0.40, "roc_min": 0.25},
+    {"nivel": 3, "raw_min": 0.35, "roc_min": 0.20},
+    {"nivel": 4, "raw_min": 0.30, "roc_min": 0.15},
+    {"nivel": 5, "raw_min": 0.25, "roc_min": 0.10},
+    {"nivel": 6, "raw_min": 0.20, "roc_min": 0.05},
+]
+DEFAULT_SPEED_LEVEL = SPEED_LEVELS[2]  # N3
+
 # ---- PARÁMETROS DE INSTRUMENTOS (para cálculo de tamaño) ----
 INSTRUMENT_PARAMS = {
     'BTC': {'ctVal': 0.01, 'lotSz': 0.01, 'minSz': 0.01},
@@ -68,7 +79,7 @@ MAX_DAILY_LOSS_PERCENT = 2.0
 MAX_WEEKLY_LOSS_PERCENT = 4.0
 MAX_POSITION_HOLD_MINUTES = 60
 CLOSE_IF_STALLED = True
-MAX_REPAIR_ATTEMPTS = 3          # <-- necesario para repair.py
+MAX_REPAIR_ATTEMPTS = 3
 MAX_RECONNECT_ATTEMPTS = 3
 RECONNECT_BACKOFF = 5
 BACKOFF_BASE = 5
@@ -104,6 +115,6 @@ MAX_LOG_FILES = 5
 # ---- OKX ----
 OKX_DEMO = True
 
-# ---- OPTIMIZACIONES DINÁMICAS (necesario para monitor.py) ----
-TP_DYNAMIC = True                # <-- necesario para monitor.py
-TRAILING_ADAPTIVE = True         # <-- opcional, pero se recomienda
+# ---- OPTIMIZACIONES DINÁMICAS ----
+TP_DYNAMIC = True
+TRAILING_ADAPTIVE = True
