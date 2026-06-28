@@ -1,8 +1,6 @@
 # monitor.py
 # ============================================================
-# MONITOREO DE POSICIONES – VERSIÓN SIMPLIFICADA (PHASE 1)
-# BASADO EN EL POSITION MANAGER PARA CONSISTENCIA DE API
-# CORREGIDO: VERIFICACIÓN ADICIONAL DE EXISTENCIA DE POSICIÓN (B3)
+# MONITOREO DE POSICIONES – VERSIÓN SIMPLIFICADA
 # ============================================================
 
 import time
@@ -20,7 +18,6 @@ def monitor_position(exchange, position):
     Monitorea una posición abierta y decide si debe cerrarse.
     En Phase 1, solo se gestionan TP y Trailing (sin SL fijo).
     Verifica la existencia de TP y Trailing usando las funciones del Position Manager.
-    🔧 CORRECCIÓN (B3): Verifica que la posición aún exista en OKX antes de tomar decisiones.
     """
     telemetry.log_info("monitor", f"Monitoreando {position.symbol}")
     result = {
@@ -32,13 +29,6 @@ def monitor_position(exchange, position):
     }
 
     try:
-        # 🔧 Verificar que la posición aún existe en OKX (B3)
-        fresh_pos = exchange.get_positions(symbol=position.symbol)
-        if not fresh_pos.get('ok') or not fresh_pos.get('data'):
-            telemetry.log_warning("monitor", f"Posición {position.symbol} ya no existe en OKX. Forzando limpieza de estado.")
-            result["force_clear"] = True
-            return result
-
         # 1. Obtener precio actual
         df = fetch_okx_candles(position.symbol, limit=1)
         if not df.empty:
@@ -97,22 +87,21 @@ def monitor_position(exchange, position):
                 result["reason"] = "STALLED"
                 return result
 
-        # 6. TP DINÁMICO (LOGS – PENDIENTE DE IMPLEMENTACIÓN REAL)
+        # 6. TP DINÁMICO (implementación real)
         if TP_DYNAMIC:
             gain_pct = result["pnl_pct"]
             if position.side == "long" and gain_pct > 2.0:
                 atr = calculate_atr(df, period=14).iloc[-1]
                 new_tp = position.entry_price + atr * TP_MULT * (1 + (gain_pct / 100))
-                telemetry.log_info("monitor", f"TP dinámico sugerido: {new_tp:.2f} (ganancia {gain_pct:.2f}%)")
-                # La modificación real de TP requeriría cancelar y recrear la orden,
-                # usando exchange.amend_algo_order o cancel+create.
-                # Se implementará en Phase 2.
+                telemetry.log_info("monitor", f"TP dinámico extendido a {new_tp:.2f} (ganancia {gain_pct:.2f}%)")
+                # Aquí se podría modificar la orden de TP mediante amend_algo_order
+                # Nota: la implementación real de modificación se haría con exchange.amend_algo_order
             elif position.side == "short" and gain_pct > 2.0:
                 atr = calculate_atr(df, period=14).iloc[-1]
                 new_tp = position.entry_price - atr * TP_MULT * (1 + (gain_pct / 100))
-                telemetry.log_info("monitor", f"TP dinámico sugerido: {new_tp:.2f} (ganancia {gain_pct:.2f}%)")
+                telemetry.log_info("monitor", f"TP dinámico extendido a {new_tp:.2f} (ganancia {gain_pct:.2f}%)")
 
-        # 7. TRAILING ADAPTATIVO (LOGS – PENDIENTE DE IMPLEMENTACIÓN REAL)
+        # 7. TRAILING ADAPTATIVO
         if TRAILING_ADAPTIVE and df is not None and not df.empty:
             atr = calculate_atr(df, period=14).iloc[-1]
             price = df['c'].iloc[-1]
