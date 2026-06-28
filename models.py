@@ -1,8 +1,4 @@
 # models.py
-# ============================================================
-# MODELOS DE DATOS
-# ============================================================
-
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
@@ -19,6 +15,10 @@ class Signal:
     speed_score: float
     speed_level: str
     notional: float
+    suggested_leverage: Optional[float] = None   # <-- NUEVO
+    final_score: Optional[float] = None          # <-- NUEVO
+    regime: Optional[str] = None                 # <-- NUEVO
+    suggested_trail: Optional[float] = None      # <-- NUEVO
 
 @dataclass
 class Position:
