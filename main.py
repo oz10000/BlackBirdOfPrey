@@ -16,7 +16,7 @@ import numpy as np
 
 from config import *
 from telemetry import telemetry
-from exchange import Exchange  # Usamos el mismo Exchange que el Position Manager
+from exchange import Exchange
 from strategy import get_best_signal
 from monitor import monitor_position
 from repair import repair_protections
@@ -269,11 +269,8 @@ class Bot:
         available_capital = usdt_balance * safety_factor
         telemetry.log_info("main", f"Capital utilizable: {available_capital:.2f} USDT")
 
-        # ============================================================
-        # 🔧 MODIFICACIÓN: Apalancamiento FIJO (LEVERAGE de config)
-        # ============================================================
-        # Usar apalancamiento fijo 7x (definido en config.py)
-        leverage_to_use = LEVERAGE  # fijo
+        # Apalancamiento FIJO
+        leverage_to_use = LEVERAGE
         desired_notional = available_capital * leverage_to_use
         telemetry.log_info("main", f"Apalancamiento usado: {leverage_to_use}x (fijo)")
 
@@ -288,11 +285,9 @@ class Bot:
 
         actual_notional = size * self.signal.entry_price * ct_val
         telemetry.log_info("main", f"Tamaño ajustado: {size} contratos (notional real ~{actual_notional:.2f} USDT)")
-        telemetry.log_info("main", f"Valor nominal enviado a la API: {actual_notional:.2f} USDT")
 
         side = "buy" if self.signal.direction == "Long" else "sell"
 
-        # 1. Orden de mercado (sin protecciones)
         order = self.exchange.place_market_order(self.signal.symbol, side, size)
         if not order.get('ok'):
             telemetry.log_error("main", "Fallo al abrir posición", order)
@@ -329,11 +324,7 @@ class Bot:
             repair_attempts=0
         )
 
-        # ============================================================
-        # PROTECCIONES SIMPLIFICADAS (PHASE 1) – USANDO FUNCIONES DEL POSITION MANAGER
-        # ============================================================
-
-        # 2. Take Profit (TP) – orden condicional con ordType="trigger"
+        # Colocar TP
         if self.signal.target_price:
             tp_side = "sell" if self.position.side == "long" else "buy"
             tp_resp = self.exchange.place_conditional_order(
@@ -352,10 +343,9 @@ class Bot:
         else:
             telemetry.log_warning("main", "No se definió TP para esta señal")
 
-        # 3. Trailing Stop – en lugar de SL fijo
+        # Colocar Trailing Stop
         if TRAILING_ENABLED and TRAILING_MODE == 'native':
             trail_side = "sell" if self.position.side == "long" else "buy"
-            # 🔧 MODIFICACIÓN: Usar suggested_trail si existe
             if hasattr(self.signal, 'suggested_trail') and self.signal.suggested_trail:
                 trail_distance = self.signal.suggested_trail
             else:
@@ -376,8 +366,6 @@ class Bot:
                 telemetry.log_error("main", "Fallo al crear Trailing Stop", trail_resp)
         else:
             telemetry.log_warning("main", "Trailing Stop desactivado o modo no nativo – no se creó")
-
-        # NOTA: NO se crea SL fijo – el Trailing Stop actúa como única capa de stop-loss.
 
         # Guardar estado
         self.state_data['trades'].append({
