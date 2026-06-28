@@ -1,9 +1,7 @@
 # main.py
 # ============================================================
 # BOT PRINCIPAL – ORQUESTADOR CON SOPORTE MULTIESTRATEGIA
-# VERSIÓN OPTIMIZADA CON SISTEMA DE PROTECCIÓN SIMPLIFICADO (PHASE 1)
-# BASADO EN EL POSITION MANAGER PARA CONSISTENCIA DE API
-# CORREGIDO: DESINCRONIZACIÓN DE POSICIÓN (B1)
+# VERSIÓN OPTIMIZADA – APALANCAMIENTO FIJO 7x
 # ============================================================
 
 import os
@@ -271,8 +269,13 @@ class Bot:
         available_capital = usdt_balance * safety_factor
         telemetry.log_info("main", f"Capital utilizable: {available_capital:.2f} USDT")
 
-        desired_notional = available_capital * LEVERAGE
-        telemetry.log_info("main", f"Notional deseado: {desired_notional:.2f} USDT (leverage {LEVERAGE}x)")
+        # ============================================================
+        # 🔧 MODIFICACIÓN: Apalancamiento FIJO (LEVERAGE de config)
+        # ============================================================
+        # Usar apalancamiento fijo 7x (definido en config.py)
+        leverage_to_use = LEVERAGE  # fijo
+        desired_notional = available_capital * leverage_to_use
+        telemetry.log_info("main", f"Apalancamiento usado: {leverage_to_use}x (fijo)")
 
         size = desired_notional / (self.signal.entry_price * ct_val)
         if lot_sz > 0:
@@ -352,7 +355,12 @@ class Bot:
         # 3. Trailing Stop – en lugar de SL fijo
         if TRAILING_ENABLED and TRAILING_MODE == 'native':
             trail_side = "sell" if self.position.side == "long" else "buy"
-            callback = TRAILING_DISTANCE_ATR * 0.01
+            # 🔧 MODIFICACIÓN: Usar suggested_trail si existe
+            if hasattr(self.signal, 'suggested_trail') and self.signal.suggested_trail:
+                trail_distance = self.signal.suggested_trail
+            else:
+                trail_distance = TRAILING_DISTANCE_ATR
+            callback = trail_distance * 0.01
             telemetry.log_info("main", f"Creando Trailing Stop para {self.position.symbol} (callback={callback:.3f})")
             trail_resp = self.exchange.place_trailing_order(
                 symbol=self.position.symbol,
@@ -377,10 +385,10 @@ class Bot:
             'side': self.position.side,
             'entry': self.position.entry_price,
             'tp': self.signal.target_price,
-            'trailing_callback': TRAILING_DISTANCE_ATR * 0.01 if TRAILING_ENABLED else None,
+            'trailing_callback': callback if TRAILING_ENABLED else None,
             'size': self.position.size,
             'notional': actual_notional,
-            'leverage': LEVERAGE,
+            'leverage': leverage_to_use,
             'ctVal': ct_val,
             'timestamp': datetime.utcnow().isoformat()
         })
@@ -389,10 +397,6 @@ class Bot:
         self.state = BotState.WAIT_NEXT_CYCLE
 
     def _close_position(self):
-        """
-        Cierra la posición actual con una orden de mercado en sentido contrario.
-        🔧 CORRECCIÓN (B1): self.position se limpia SIEMPRE, incluso si la orden falla.
-        """
         if self.position is None:
             return
         telemetry.log_info("main", f"Cerrando posición: {self.position.symbol} {self.position.side}")
@@ -400,13 +404,10 @@ class Bot:
         close_resp = self.exchange.place_market_order(self.position.symbol, side, self.position.size)
         if close_resp.get('ok'):
             telemetry.log_info("main", "Posición cerrada exitosamente", close_resp)
+            self.position = None
         else:
             telemetry.log_error("main", "Fallo al cerrar posición", close_resp)
             self.state = BotState.ERROR_RECOVERY
-
-        # 🔧 FIX: Limpiar el estado de posición SIEMPRE, incluso si la orden falla
-        # Esto evita desincronización entre el bot y OKX.
-        self.position = None
 
     def _wait_next_cycle(self):
         telemetry.log_info("main", "Esperando siguiente ciclo...")
