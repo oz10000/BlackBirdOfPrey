@@ -68,9 +68,7 @@ MAX_DAILY_LOSS_PERCENT = 2.0
 MAX_WEEKLY_LOSS_PERCENT = 4.0
 MAX_POSITION_HOLD_MINUTES = 60
 CLOSE_IF_STALLED = True
-
-# ---- RECONEXIÓN Y REINTENTOS ----
-MAX_REPAIR_ATTEMPTS = 3
+MAX_REPAIR_ATTEMPTS = 3          # <-- necesario para repair.py
 MAX_RECONNECT_ATTEMPTS = 3
 RECONNECT_BACKOFF = 5
 BACKOFF_BASE = 5
@@ -105,3 +103,7 @@ MAX_LOG_FILES = 5
 
 # ---- OKX ----
 OKX_DEMO = True
+
+# ---- OPTIMIZACIONES DINÁMICAS (necesario para monitor.py) ----
+TP_DYNAMIC = True                # <-- necesario para monitor.py
+TRAILING_ADAPTIVE = True         # <-- opcional, pero se recomienda
