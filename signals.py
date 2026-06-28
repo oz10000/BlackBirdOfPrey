@@ -109,7 +109,7 @@ def fetch_historical(symbol: str, days: int = 90) -> pd.DataFrame:
     return df.sort_values('ts').reset_index(drop=True)
 
 # ============================================================
-# 3. CÁLCULO DEL SCORE PiDelta
+# 3. CÁLCULO DEL SCORE PiDelta (para compatibilidad con estrategias antiguas)
 # ============================================================
 
 def calc_pidelta_score(df: pd.DataFrame) -> tuple:
@@ -127,7 +127,7 @@ def calc_pidelta_score(df: pd.DataFrame) -> tuple:
     return raw_score, senal
 
 # ============================================================
-# 4. VERIFICACIÓN DE FILTROS (CON TEST_MODE)
+# 4. VERIFICACIÓN DE FILTROS (PiDelta)
 # ============================================================
 
 def check_filters(df: pd.DataFrame, idx: int, direccion: str, symbol: str) -> bool:
@@ -169,15 +169,12 @@ def check_filters(df: pd.DataFrame, idx: int, direccion: str, symbol: str) -> bo
     return True
 
 # ============================================================
-# 5. GENERACIÓN DE SEÑAL (CON TEST_MODE)
+# 5. GENERACIÓN DE SEÑAL (PiDelta)
 # ============================================================
 
-def generate_signal(df: pd.DataFrame, symbol: str, direction: str, speed_level: dict) -> Optional[Signal]:
+def generate_signal(df: pd.DataFrame, symbol: str, direction: str, speed_level: dict) -> Optional[Dict]:
     if df.empty or len(df) < 30:
         return None
-
-    if TEST_MODE:
-        speed_level = TEST_SPEED_LEVEL
 
     last = df.iloc[-1]
     raw_score, senal = calc_pidelta_score(df)
@@ -201,7 +198,7 @@ def generate_signal(df: pd.DataFrame, symbol: str, direction: str, speed_level: 
         if not (abs(raw_score) > raw_th and roc_val < -roc_th):
             return None
 
-    # Anti-Chase (relajado en modo prueba)
+    # Anti-Chase
     high, low, close = df['h'].iloc[-1], df['l'].iloc[-1], df['c'].iloc[-1]
     if high - low <= 0:
         return None
@@ -223,15 +220,15 @@ def generate_signal(df: pd.DataFrame, symbol: str, direction: str, speed_level: 
     confidence = min(1.0, abs(raw_score) * 1.2 + 0.1)
     speed_score = abs(raw_score) * (1 + abs(roc_val) / 10)
 
-    return Signal(
-        symbol=symbol,
-        direction=direction,
-        timestamp=datetime.utcnow(),
-        entry_price=entry,
-        target_price=tp,
-        stop_loss=sl,
-        confidence=confidence,
-        speed_score=speed_score,
-        speed_level=f"N{speed_level['nivel']}",
-        notional=TRADE_NOTIONAL
-    )
+    return {
+        'symbol': symbol,
+        'direction': direction,
+        'timestamp': datetime.utcnow(),
+        'entry': entry,
+        'tp': tp,
+        'sl': sl,
+        'confidence': confidence,
+        'speed_score': speed_score,
+        'speed_level': f"N{speed_level['nivel']}",
+        'notional': TRADE_NOTIONAL
+    }
