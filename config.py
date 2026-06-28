@@ -33,6 +33,25 @@ TRAILING_MODE = 'native'
 TRAILING_DISTANCE_ATR = 0.6
 TRAILING_ACTIVATION_PROFIT = 0.6
 
+# ---- FILTROS (necesario para signals.py, pero no usado en Leviatán) ----
+FILTERS = {}  # vacío, porque Leviatán no usa filtros de PiDelta
+
+# ---- PARÁMETROS DE INSTRUMENTOS (para cálculo de tamaño) ----
+INSTRUMENT_PARAMS = {
+    'BTC': {'ctVal': 0.01, 'lotSz': 0.01, 'minSz': 0.01},
+    'ETH': {'ctVal': 0.1, 'lotSz': 0.01, 'minSz': 0.01},
+    'SOL': {'ctVal': 1.0, 'lotSz': 0.01, 'minSz': 0.01},
+    'ADA': {'ctVal': 100.0, 'lotSz': 0.01, 'minSz': 0.01},
+    'XRP': {'ctVal': 100.0, 'lotSz': 0.01, 'minSz': 0.01},
+    'AVAX': {'ctVal': 1.0, 'lotSz': 0.1, 'minSz': 0.1},
+}
+
+# ---- BACKTEST Y TEST (necesario para signals.py) ----
+BACKTEST_SLIPPAGE = 0.0002
+TEST_MODE = False
+TEST_SPEED_LEVEL = {"nivel": 6, "raw_min": 0.05, "roc_min": 0.01}
+TEST_IGNORE_FILTERS = True
+
 # ---- ESTRATEGIA ----
 ACTIVE_STRATEGY = 'leviathan'
 STRATEGY_MODULES = {
