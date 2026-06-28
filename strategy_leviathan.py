@@ -2,6 +2,7 @@
 # ============================================================
 # ESTRATEGIA LEVIATÁN V8 – WIN RATE ≥90%
 # Ranking con penalización por duración, parámetros por activo
+# CORREGIDO: usa 'c' en lugar de 'close' para compatibilidad con signals.py
 # ============================================================
 
 import math
@@ -16,14 +17,14 @@ import config
 # ------------------------------------------------------------
 # 1. INDICADORES
 # ------------------------------------------------------------
-def calculate_ker(close, period=10):
-    abs_diff = abs(close.diff(period))
-    sum_abs = close.diff().abs().rolling(period).sum()
+def calculate_ker(series, period=10):
+    abs_diff = abs(series.diff(period))
+    sum_abs = series.diff().abs().rolling(period).sum()
     return abs_diff / (sum_abs + 1e-6)
 
 def calculate_adx(df, period=14):
-    high, low, close = df['h'], df['l'], df['c']
-    tr = pd.concat([high - low, (high - close.shift()).abs(), (low - close.shift()).abs()], axis=1).max(axis=1)
+    high, low, c = df['h'], df['l'], df['c']
+    tr = pd.concat([high - low, (high - c.shift()).abs(), (low - c.shift()).abs()], axis=1).max(axis=1)
     atr = tr.rolling(period).mean()
     up = high.diff()
     down = low.diff()
@@ -55,18 +56,18 @@ def choppiness_index(df, period=14):
 # ------------------------------------------------------------
 def compute_features(df):
     df = df.copy()
-    df["prev_close"] = df["close"].shift(1)
-    df["tr"] = np.maximum(df["high"] - df["low"],
-                          np.maximum(abs(df["high"] - df["prev_close"]),
-                                     abs(df["low"] - df["prev_close"])))
+    df["prev_close"] = df["c"].shift(1)
+    df["tr"] = np.maximum(df["h"] - df["l"],
+                          np.maximum(abs(df["h"] - df["prev_close"]),
+                                     abs(df["l"] - df["prev_close"])))
     df["atr"] = df["tr"].rolling(14).mean()
-    df["atr_pct"] = df["atr"] / df["close"]
-    df["ema20"] = df["close"].ewm(span=20, adjust=False).mean()
-    df["ema50"] = df["close"].ewm(span=50, adjust=False).mean()
+    df["atr_pct"] = df["atr"] / df["c"]
+    df["ema20"] = df["c"].ewm(span=20, adjust=False).mean()
+    df["ema50"] = df["c"].ewm(span=50, adjust=False).mean()
     df["slope_ema20"] = df["ema20"].diff(5) / df["ema20"].shift(5)
     df["volume_avg"] = df["vol"].rolling(20).mean()
     df["volume_ratio"] = df["vol"] / df["volume_avg"]
-    df["momentum"] = df["close"].pct_change(5)
+    df["momentum"] = df["c"].pct_change(5)
     df["trend_up"] = np.where((df["ema20"] > df["ema50"]) & (df["slope_ema20"] > 0), 100,
                               np.where((df["ema20"] > df["ema50"]) & (df["slope_ema20"] <= 0), 70,
                                        np.where((df["ema20"] < df["ema50"]) & (df["slope_ema20"] < 0), 0, 30)))
@@ -79,7 +80,6 @@ def compute_features(df):
 # 3. DETECCIÓN DE RÉGIMEN
 # ------------------------------------------------------------
 def detect_regime(df):
-    # df debe tener las columnas creadas por compute_features
     atr_pct = df['atr_pct'].iloc[-1]
     ker = calculate_ker(df['c']).iloc[-1]
     adx, _, _ = calculate_adx(df)
@@ -105,11 +105,10 @@ def detect_regime(df):
 # 4. SCORE MAESTRO CON PENALIZACIÓN POR DURACIÓN
 # ------------------------------------------------------------
 def compute_final_score(df, symbol):
-    # df ya debe tener las columnas de compute_features
     row = df.iloc[-1]
-    close = row['close']
-    high = row['high']
-    low = row['low']
+    c = row['c']
+    h = row['h']
+    l = row['l']
     vol = row['vol']
     atr = row['atr']
     atr_pct = row['atr_pct']
@@ -121,14 +120,14 @@ def compute_final_score(df, symbol):
     chop = choppiness_index(df).iloc[-1]
 
     # Velocidad y aceleración
-    price_vel = (close - df['c'].shift(5).iloc[-1]) / df['c'].shift(5).iloc[-1]
+    price_vel = (c - df['c'].shift(5).iloc[-1]) / df['c'].shift(5).iloc[-1]
     price_acc = price_vel - (df['c'].shift(5).iloc[-1] - df['c'].shift(10).iloc[-1]) / df['c'].shift(10).iloc[-1]
     vol_vel = (vol - df['vol'].shift(5).iloc[-1]) / df['vol'].shift(5).iloc[-1]
     atr_vel = (atr - df['atr'].shift(5).iloc[-1]) / df['atr'].shift(5).iloc[-1] if 'atr' in df else 0
 
     # Componentes
     trend = 1 if row['ema20'] > row['ema50'] else 0
-    momentum = (close / df['c'].shift(5).iloc[-1] - 1) * 10
+    momentum = (c / df['c'].shift(5).iloc[-1] - 1) * 10
     expansion = atr_pct * 100
     compression = 1 - (bw / 0.2) if bw < 0.2 else 0
     volume_score = vol / df['vol'].rolling(20).mean().iloc[-1]
@@ -239,7 +238,7 @@ def get_best_signal(symbols=None, speed_levels=None, speed_levels_override=None)
         # Apalancamiento fijo
         leverage = config.LEVERAGE
 
-        entry = row['close']
+        entry = row['c']
         if direction == 1:
             tp = entry + atr * params['tp_mult']
             sl = entry - atr * config.SL_MULT
