@@ -1,8 +1,6 @@
 # repair.py
 # ============================================================
-# REPARACIÓN DE PROTECCIONES – SOLO TP Y TRAILING STOP (PHASE 1)
-# BASADO EN EL POSITION MANAGER PARA CONSISTENCIA DE API
-# CORREGIDO: VERIFICACIÓN DE EXISTENCIA DE POSICIÓN (B2)
+# REPARACIÓN DE PROTECCIONES – SOLO TP Y TRAILING STOP
 # ============================================================
 
 import traceback
@@ -17,12 +15,11 @@ def repair_protections(exchange, position):
       - Trailing Stop (si está habilitado) si falta
     NO se repara Stop Loss fijo.
     Utiliza las mismas funciones que el Position Manager.
-    🔧 CORRECCIÓN (B2): Verifica que la posición aún exista en OKX antes de reparar.
     """
     telemetry.log_info("repair", f"Iniciando reparación para {position.symbol} (intento {position.repair_attempts+1}/{MAX_REPAIR_ATTEMPTS})")
     result = {"tp": False, "trailing": False, "error": None}
 
-    # 🔧 Verificar que la posición aún existe en OKX
+    # Verificar que la posición aún existe en OKX
     pos_check = exchange.get_positions(symbol=position.symbol)
     if not pos_check.get('ok') or not pos_check.get('data'):
         telemetry.log_warning("repair", f"Posición {position.symbol} ya no existe en OKX. Saltando reparación.")
@@ -48,8 +45,6 @@ def repair_protections(exchange, position):
         # 2. Identificar protecciones existentes
         has_tp = False
         has_trailing = False
-        tp_algo_id = None
-        trailing_algo_id = None
 
         for o in orders:
             ord_type = o.get('ordType')
@@ -58,14 +53,11 @@ def repair_protections(exchange, position):
             if ord_type in ['conditional', 'trigger']:
                 if position.side == 'long' and side == 'sell':
                     has_tp = True
-                    tp_algo_id = o.get('algoId')
                 elif position.side == 'short' and side == 'buy':
                     has_tp = True
-                    tp_algo_id = o.get('algoId')
             # Trailing Stop
             elif ord_type == 'move_order_stop':
                 has_trailing = True
-                trailing_algo_id = o.get('algoId')
 
         # 3. Reparar TP si falta
         if not has_tp:
